@@ -1,0 +1,8 @@
+{
+  "input": {
+    "video_url": "https://example.com/infinitetalk_output.mp4",
+    "audio_url": "https://example.com/original_audio.wav",
+    "bbox_shift": 0,
+    "use_float16": true
+  }
+}
