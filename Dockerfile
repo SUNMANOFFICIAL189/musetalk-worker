@@ -24,6 +24,9 @@ RUN pip install --no-cache-dir \
     torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 \
     --index-url https://download.pytorch.org/whl/cu118
 
+# Install huggingface CLI early (needed for model downloads)
+RUN pip install --no-cache-dir "huggingface_hub[cli]"
+
 # Clone MuseTalk
 RUN git clone https://github.com/TMElyralab/MuseTalk.git /app/MuseTalk
 
@@ -32,8 +35,12 @@ WORKDIR /app/MuseTalk
 # Install MuseTalk requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install whisper subpackage (required for audio feature extraction)
-RUN pip install --editable ./musetalk/whisper
+# Install whisper subpackage if it exists, otherwise install openai-whisper
+RUN if [ -d "./musetalk/whisper" ] && [ -f "./musetalk/whisper/setup.py" ]; then \
+        pip install --editable ./musetalk/whisper; \
+    else \
+        pip install --no-cache-dir openai-whisper; \
+    fi
 
 # Install mmlab packages (required for face detection/parsing)
 RUN pip install --no-cache-dir -U openmim && \
@@ -46,11 +53,9 @@ RUN pip install --no-cache-dir -U openmim && \
 RUN pip install --no-cache-dir \
     runpod \
     pyyaml \
-    requests \
-    "huggingface_hub[cli]"
+    requests
 
 # Download ALL model weights using huggingface-cli (handles Xet/LFS correctly)
-# This downloads the entire TMElyralab/MuseTalk repo into models/
 RUN huggingface-cli download TMElyralab/MuseTalk --local-dir models/
 
 # Download SD VAE weights (separate repo)
