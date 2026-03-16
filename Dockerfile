@@ -1,10 +1,6 @@
 # MuseTalk 1.5 RunPod Serverless Worker
 # ======================================
-# Builds a container with MuseTalk 1.5 + all dependencies + model weights
-# for deployment as a RunPod Serverless endpoint.
-#
 # GPU requirement: 4GB+ VRAM (fp16) — runs on T4, L4, A10, RTX 4000 etc.
-# This makes it extremely cheap on RunPod Serverless.
 
 FROM runpod/base:0.6.2-cuda11.8.0
 
@@ -36,6 +32,9 @@ WORKDIR /app/MuseTalk
 # Install MuseTalk requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install whisper subpackage (required for audio feature extraction)
+RUN pip install --editable ./musetalk/whisper
+
 # Install mmlab packages (required for face detection/parsing)
 RUN pip install --no-cache-dir -U openmim && \
     mim install mmengine && \
@@ -47,39 +46,22 @@ RUN pip install --no-cache-dir -U openmim && \
 RUN pip install --no-cache-dir \
     runpod \
     pyyaml \
-    requests
+    requests \
+    "huggingface_hub[cli]"
 
-# Download model weights
-# MuseTalk core model (~400MB)
-RUN mkdir -p models/musetalk && \
-    wget -q -O models/musetalk/musetalk.json \
-    "https://huggingface.co/TMElyralab/MuseTalk/resolve/main/models/musetalk/musetalk.json" && \
-    wget -q -O models/musetalk/pytorch_model.bin \
-    "https://huggingface.co/TMElyralab/MuseTalk/resolve/main/models/musetalk/pytorch_model.bin"
+# Download ALL model weights using huggingface-cli (handles Xet/LFS correctly)
+# This downloads the entire TMElyralab/MuseTalk repo into models/
+RUN huggingface-cli download TMElyralab/MuseTalk --local-dir models/
 
-# DWPose model (~300MB)
-RUN mkdir -p models/dwpose && \
-    wget -q -O models/dwpose/dw-ll_ucoco_384.pth \
-    "https://huggingface.co/TMElyralab/MuseTalk/resolve/main/models/dwpose/dw-ll_ucoco_384.pth"
+# Download SD VAE weights (separate repo)
+RUN huggingface-cli download stabilityai/sd-vae-ft-mse \
+    config.json diffusion_pytorch_model.bin \
+    --local-dir models/sd-vae-ft-mse/
 
-# Face parsing models
-RUN mkdir -p models/face-parse-bisent && \
-    wget -q -O models/face-parse-bisent/79999_iter.pth \
-    "https://huggingface.co/TMElyralab/MuseTalk/resolve/main/models/face-parse-bisent/79999_iter.pth" && \
-    wget -q -O models/face-parse-bisent/resnet18-5c106cde.pth \
-    "https://huggingface.co/TMElyralab/MuseTalk/resolve/main/models/face-parse-bisent/resnet18-5c106cde.pth"
-
-# SD VAE
-RUN mkdir -p models/sd-vae-ft-mse && \
-    wget -q -O models/sd-vae-ft-mse/config.json \
-    "https://huggingface.co/stabilityai/sd-vae-ft-mse/resolve/main/config.json" && \
-    wget -q -O models/sd-vae-ft-mse/diffusion_pytorch_model.bin \
-    "https://huggingface.co/stabilityai/sd-vae-ft-mse/resolve/main/diffusion_pytorch_model.bin"
-
-# Whisper tiny
+# Download Whisper weights for audio processing
 RUN mkdir -p models/whisper && \
-    wget -q -O models/whisper/tiny.pt \
-    "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
+    huggingface-cli download openai/whisper-tiny \
+    --local-dir models/whisper/
 
 # Copy handler
 WORKDIR /app
